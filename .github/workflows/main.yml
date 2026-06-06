@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Session duration in hours'
+        description: 'Session duration (hours)'
         required: false
         default: '3'
         type: choice
         options: ['1', '2', '3']
   repository_dispatch:
-    types:
-      - start-server
+    types: [start-server]
 
 jobs:
   run-server:
@@ -20,63 +19,523 @@ jobs:
 
     steps:
 
-      # ── 1. Checkout ──────────────────────────────────
+      # ══════════════════════════════════════════
+      # 1. Checkout
+      # ══════════════════════════════════════════
       - name: 📦 Checkout Repository
         uses: actions/checkout@v4
 
-      # ── 2. Java 21 ───────────────────────────────────
-      - name: ☕ Setup Java 21 (Temurin)
+      # ══════════════════════════════════════════
+      # 2. Java 21
+      # ══════════════════════════════════════════
+      - name: ☕ Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # ── 3. Session Duration ───────────────────────────
+      # ══════════════════════════════════════════
+      # 3. Session Duration
+      # ══════════════════════════════════════════
       - name: ⚙️ Set Session Duration
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            DURATION="${{ github.event.client_payload.duration }}"
+            D="${{ github.event.client_payload.duration }}"
           else
-            DURATION="${{ github.event.inputs.duration }}"
+            D="${{ github.event.inputs.duration }}"
           fi
-          DURATION="${DURATION:-3}"
-          SESSION_SECONDS=$((DURATION * 3600))
-          echo "DURATION=${DURATION}" >> $GITHUB_ENV
-          echo "SESSION_SECONDS=${SESSION_SECONDS}" >> $GITHUB_ENV
-          echo "✅ Session: ${DURATION}h = ${SESSION_SECONDS}s"
+          D="${D:-3}"
+          echo "DURATION=${D}" >> $GITHUB_ENV
+          echo "SESSION_SECONDS=$((D * 3600))" >> $GITHUB_ENV
+          echo "✅ Session: ${D}h"
 
-      # ── 4. Download PaperMC ───────────────────────────
-      - name: 📥 Download PaperMC 1.21.4
+      # ══════════════════════════════════════════
+      # 4. Download PaperMC 1.21.10
+      # ══════════════════════════════════════════
+      - name: 📥 Download PaperMC 1.21.10
         run: |
           rm -f server.jar
-          BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds" \
-            | python3 -c "import sys,json; b=json.load(sys.stdin)['builds']; print(b[-1]['build'])")
-          echo "→ Downloading build #${BUILD}..."
-          curl -fSL -o server.jar \
-            "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/${BUILD}/downloads/paper-1.21.4-${BUILD}.jar"
+          echo "Fetching latest stable PaperMC 1.21.10 build..."
+          DL_URL=$(curl -s "https://fill.papermc.io/v3/projects/paper/versions/1.21.10/builds" \
+            | python3 -c "
+import sys, json
+builds = json.load(sys.stdin)
+stable = [b for b in builds if b.get('channel','') == 'STABLE']
+b = stable[-1] if stable else builds[-1]
+print(b['downloads']['server:default']['url'])
+")
+          curl -fSL -o server.jar "$DL_URL"
           ls -lh server.jar
-          echo "✅ PaperMC ready"
+          echo "✅ PaperMC 1.21.10 ready"
 
-      # ── 5. EULA ───────────────────────────────────────
+      # ══════════════════════════════════════════
+      # 5. EULA
+      # ══════════════════════════════════════════
       - name: 📝 Accept EULA
         run: echo "eula=true" > eula.txt
 
-      # ── 6. Plugins folder safe ────────────────────────
-      - name: 🔌 Ensure Plugins Folder
+      # ══════════════════════════════════════════
+      # 6. server.properties
+      # ══════════════════════════════════════════
+      - name: ⚙️ Setup server.properties
+        run: |
+          if [ ! -f server.properties ]; then
+            cat > server.properties << 'EOF'
+          server-port=25565
+          online-mode=false
+          max-players=20
+          view-distance=8
+          simulation-distance=5
+          difficulty=normal
+          gamemode=survival
+          spawn-protection=0
+          motd=\u00a7b\u00a7lSTAR SMP \u00a7r\u00a77| Java + Bedrock
+          allow-nether=true
+          enable-command-block=true
+          EOF
+            echo "✅ server.properties created"
+          else
+            echo "✅ Existing server.properties kept"
+          fi
+
+      # ══════════════════════════════════════════
+      # 7. Download All Plugins
+      # ══════════════════════════════════════════
+      - name: 🔌 Download Plugins
         run: |
           mkdir -p plugins
-          echo "Plugins in repo:"
-          ls -la plugins/ || echo "(none yet)"
+          cd plugins
 
-      # ── 7. Playit.gg Download ─────────────────────────
-      - name: 🔗 Download Playit.gg Agent
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "   Downloading STAR SMP Plugins (15)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # ── CROSSPLAY ─────────────────────────────────────────
+
+          # 1. ViaVersion — পুরনো Java clients
+          echo "[1/15] ViaVersion..."
+          curl -fSL -o ViaVersion.jar \
+            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.3.2/PAPER/ViaVersion-5.3.2.jar"
+
+          # 2. ViaBackwards — 1.19/1.20 clients ও চলবে
+          echo "[2/15] ViaBackwards..."
+          curl -fSL -o ViaBackwards.jar \
+            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.3.2/PAPER/ViaBackwards-5.3.2.jar"
+
+          # 3. Geyser — Bedrock crossplay
+          echo "[3/15] Geyser..."
+          curl -fSL -o Geyser-Spigot.jar \
+            "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+
+          # 4. Floodgate — Bedrock auth (online-mode=false safe)
+          echo "[4/15] Floodgate..."
+          curl -fSL -o floodgate-spigot.jar \
+            "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+
+          # ── PERMISSIONS & CORE ────────────────────────────────
+
+          # 5. LuckPerms — Permission system
+          echo "[5/15] LuckPerms..."
+          LP_URL=$(curl -s "https://metadata.luckperms.net/data/all" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['downloads']['bukkit'])")
+          curl -fSL -o LuckPerms.jar "$LP_URL"
+
+          # 6. VaultUnlocked — Economy API (Vault fork, 1.21 compatible)
+          echo "[6/15] VaultUnlocked..."
+          curl -fSL -o VaultUnlocked.jar \
+            "https://github.com/milkdrinkers/Vault/releases/latest/download/VaultUnlocked.jar"
+
+          # 7. EssentialsX — Core commands (/home /tpa /warp /spawn etc)
+          echo "[7/15] EssentialsX..."
+          curl -fSL -o EssentialsX.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsX-2.21.2.jar"
+
+          # 8. EssentialsXChat — Chat formatting with prefix/suffix
+          echo "[8/15] EssentialsXChat..."
+          curl -fSL -o EssentialsXChat.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXChat-2.21.2.jar"
+
+          # 9. EssentialsXSpawn — Spawn & join control
+          echo "[9/15] EssentialsXSpawn..."
+          curl -fSL -o EssentialsXSpawn.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXSpawn-2.21.2.jar"
+
+          # ── ECONOMY & SHOP ────────────────────────────────────
+
+          # 10. GUIShop — GUI-based /shop (buy & sell)
+          echo "[10/15] GUIShop..."
+          curl -fSL -o GUIShop.jar \
+            "https://github.com/pablo67340/GUIShop/releases/latest/download/GUIShop.jar"
+
+          # ── PLAYER EXPERIENCE ─────────────────────────────────
+
+          # 11. PlaceholderAPI — Variable support for all plugins
+          echo "[11/15] PlaceholderAPI..."
+          curl -fSL -o PlaceholderAPI.jar \
+            "https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.11.6/PlaceholderAPI-2.11.6.jar"
+
+          # 12. SkinsRestorer — Bedrock players এর skin fix
+          echo "[12/15] SkinsRestorer..."
+          curl -fSL -o SkinsRestorer.jar \
+            "https://github.com/SkinsRestorer/SkinsRestorer/releases/latest/download/SkinsRestorer.jar"
+
+          # 13. TAB — Tab list, nametags, scoreboard
+          echo "[13/15] TAB..."
+          curl -fSL -o TAB.jar \
+            "https://github.com/NEZNAMY/TAB/releases/download/5.0.7/TAB.v5.0.7.jar"
+
+          # 14. TreeAssist — Auto replant trees when cut
+          echo "[14/15] TreeAssist..."
+          curl -fSL -o TreeAssist.jar \
+            "https://github.com/nicuch/TreeAssist/releases/latest/download/TreeAssist.jar" \
+            || echo "⚠️ TreeAssist skip (optional)"
+
+          # 15. ClearLag — Auto clear dropped items (prevent lag)
+          echo "[15/15] ClearLag..."
+          curl -fSL -o ClearLag.jar \
+            "https://github.com/JOPHESTUS/ClearLag/releases/latest/download/ClearLag.jar" \
+            || echo "⚠️ ClearLag skip (optional)"
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Plugins downloaded:"
+          ls -lh *.jar 2>/dev/null || echo "(none)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # ══════════════════════════════════════════
+      # 8. Setup GUIShop config (pre-built shop)
+      # ══════════════════════════════════════════
+      - name: 🛒 Setup GUIShop Config
+        run: |
+          mkdir -p plugins/GUIShop
+
+          # Only create if doesn't exist (preserves existing config after backup)
+          if [ ! -f plugins/GUIShop/shops.yml ]; then
+            cat > plugins/GUIShop/shops.yml << 'EOF'
+          shops:
+            # ── BLOCKS ──────────────────────────────
+            Blocks:
+              pages:
+                Page0:
+                  '0':
+                    type: SHOP
+                    id: STONE
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&7Stone'
+                  '1':
+                    type: SHOP
+                    id: COBBLESTONE
+                    buy-price: 3
+                    sell-price: 1
+                    shop-name: '&7Cobblestone'
+                  '2':
+                    type: SHOP
+                    id: DIRT
+                    buy-price: 2
+                    sell-price: 1
+                    shop-name: '&6Dirt'
+                  '3':
+                    type: SHOP
+                    id: SAND
+                    buy-price: 4
+                    sell-price: 2
+                    shop-name: '&eSand'
+                  '4':
+                    type: SHOP
+                    id: GRAVEL
+                    buy-price: 4
+                    sell-price: 2
+                    shop-name: '&8Gravel'
+                  '5':
+                    type: SHOP
+                    id: OAK_LOG
+                    buy-price: 8
+                    sell-price: 4
+                    shop-name: '&6Oak Log'
+                  '6':
+                    type: SHOP
+                    id: OAK_PLANKS
+                    buy-price: 3
+                    sell-price: 1
+                    shop-name: '&6Oak Planks'
+                  '7':
+                    type: SHOP
+                    id: GLASS
+                    buy-price: 10
+                    sell-price: 3
+                    shop-name: '&bGlass'
+                  '8':
+                    type: SHOP
+                    id: OBSIDIAN
+                    buy-price: 50
+                    sell-price: 20
+                    shop-name: '&5Obsidian'
+
+            # ── ORES & GEMS ─────────────────────────
+            Ores:
+              pages:
+                Page0:
+                  '0':
+                    type: SHOP
+                    id: COAL
+                    buy-price: 8
+                    sell-price: 4
+                    shop-name: '&8Coal'
+                  '1':
+                    type: SHOP
+                    id: IRON_INGOT
+                    buy-price: 20
+                    sell-price: 10
+                    shop-name: '&7Iron Ingot'
+                  '2':
+                    type: SHOP
+                    id: GOLD_INGOT
+                    buy-price: 35
+                    sell-price: 18
+                    shop-name: '&6Gold Ingot'
+                  '3':
+                    type: SHOP
+                    id: DIAMOND
+                    buy-price: 150
+                    sell-price: 80
+                    shop-name: '&bDiamond'
+                  '4':
+                    type: SHOP
+                    id: EMERALD
+                    buy-price: 100
+                    sell-price: 50
+                    shop-name: '&aEmerald'
+                  '5':
+                    type: SHOP
+                    id: NETHERITE_INGOT
+                    buy-price: 500
+                    sell-price: 300
+                    shop-name: '&8Netherite'
+                  '6':
+                    type: SHOP
+                    id: LAPIS_LAZULI
+                    buy-price: 10
+                    sell-price: 5
+                    shop-name: '&9Lapis'
+                  '7':
+                    type: SHOP
+                    id: REDSTONE
+                    buy-price: 8
+                    sell-price: 3
+                    shop-name: '&cRedstone'
+                  '8':
+                    type: SHOP
+                    id: QUARTZ
+                    buy-price: 12
+                    sell-price: 5
+                    shop-name: '&fQuartz'
+
+            # ── FOOD ────────────────────────────────
+            Food:
+              pages:
+                Page0:
+                  '0':
+                    type: SHOP
+                    id: BREAD
+                    buy-price: 8
+                    sell-price: 3
+                    shop-name: '&6Bread'
+                  '1':
+                    type: SHOP
+                    id: COOKED_BEEF
+                    buy-price: 12
+                    sell-price: 5
+                    shop-name: '&6Steak'
+                  '2':
+                    type: SHOP
+                    id: COOKED_CHICKEN
+                    buy-price: 10
+                    sell-price: 4
+                    shop-name: '&eChicken'
+                  '3':
+                    type: SHOP
+                    id: GOLDEN_APPLE
+                    buy-price: 80
+                    sell-price: 40
+                    shop-name: '&6Golden Apple'
+                  '4':
+                    type: SHOP
+                    id: ENCHANTED_GOLDEN_APPLE
+                    buy-price: 500
+                    sell-price: 0
+                    shop-name: '&dGod Apple'
+                  '5':
+                    type: SHOP
+                    id: COOKED_PORKCHOP
+                    buy-price: 10
+                    sell-price: 4
+                    shop-name: '&6Porkchop'
+
+            # ── FARMING ─────────────────────────────
+            Farming:
+              pages:
+                Page0:
+                  '0':
+                    type: SHOP
+                    id: WHEAT_SEEDS
+                    buy-price: 3
+                    sell-price: 1
+                    shop-name: '&aWheat Seeds'
+                  '1':
+                    type: SHOP
+                    id: WHEAT
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&eWheat'
+                  '2':
+                    type: SHOP
+                    id: CARROT
+                    buy-price: 4
+                    sell-price: 2
+                    shop-name: '&6Carrot'
+                  '3':
+                    type: SHOP
+                    id: POTATO
+                    buy-price: 4
+                    sell-price: 2
+                    shop-name: '&ePotatot'
+                  '4':
+                    type: SHOP
+                    id: SUGAR_CANE
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&aSugar Cane'
+                  '5':
+                    type: SHOP
+                    id: CACTUS
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&2Cactus'
+
+            # ── MOB DROPS ───────────────────────────
+            MobDrops:
+              pages:
+                Page0:
+                  '0':
+                    type: SHOP
+                    id: STRING
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&fString'
+                  '1':
+                    type: SHOP
+                    id: BONE
+                    buy-price: 5
+                    sell-price: 2
+                    shop-name: '&fBone'
+                  '2':
+                    type: SHOP
+                    id: GUNPOWDER
+                    buy-price: 10
+                    sell-price: 5
+                    shop-name: '&8Gunpowder'
+                  '3':
+                    type: SHOP
+                    id: ENDER_PEARL
+                    buy-price: 30
+                    sell-price: 15
+                    shop-name: '&5Ender Pearl'
+                  '4':
+                    type: SHOP
+                    id: BLAZE_ROD
+                    buy-price: 25
+                    sell-price: 12
+                    shop-name: '&6Blaze Rod'
+                  '5':
+                    type: SHOP
+                    id: LEATHER
+                    buy-price: 8
+                    sell-price: 4
+                    shop-name: '&6Leather'
+                  '6':
+                    type: SHOP
+                    id: SPIDER_EYE
+                    buy-price: 8
+                    sell-price: 4
+                    shop-name: '&cSpider Eye'
+                  '7':
+                    type: SHOP
+                    id: ROTTEN_FLESH
+                    buy-price: 2
+                    sell-price: 1
+                    shop-name: '&2Rotten Flesh'
+                  '8':
+                    type: SHOP
+                    id: SLIME_BALL
+                    buy-price: 15
+                    sell-price: 8
+                    shop-name: '&aSlimeball'
+          EOF
+            echo "✅ GUIShop config created (5 categories)"
+          else
+            echo "✅ Existing GUIShop config kept"
+          fi
+
+          # menu.yml — Main shop menu
+          if [ ! -f plugins/GUIShop/menu.yml ]; then
+            cat > plugins/GUIShop/menu.yml << 'EOF'
+          menu:
+            rows: 3
+            title: '&8» &b&lSTAR SMP &8| &7Shop'
+            items:
+              '10':
+                type: BUTTON
+                id: STONE
+                name: '&7&lBlocks'
+                lore:
+                  - '&8Buy & Sell building blocks'
+                shop: Blocks
+              '12':
+                type: BUTTON
+                id: DIAMOND
+                name: '&b&lOres & Gems'
+                lore:
+                  - '&8Buy & Sell ores and gems'
+                shop: Ores
+              '14':
+                type: BUTTON
+                id: BREAD
+                name: '&6&lFood'
+                lore:
+                  - '&8Buy & Sell food items'
+                shop: Food
+              '16':
+                type: BUTTON
+                id: WHEAT
+                name: '&a&lFarming'
+                lore:
+                  - '&8Buy & Sell farming items'
+                shop: Farming
+              '22':
+                type: BUTTON
+                id: BONE
+                name: '&f&lMob Drops'
+                lore:
+                  - '&8Buy & Sell mob drops'
+                shop: MobDrops
+          EOF
+            echo "✅ GUIShop menu.yml created"
+          fi
+
+      # ══════════════════════════════════════════
+      # 9. Download Playit.gg
+      # ══════════════════════════════════════════
+      - name: 🔗 Setup Playit.gg Agent
         run: |
           curl -fSL -o playit \
             "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux_amd64"
           chmod +x playit
           echo "✅ Playit agent ready"
 
-      # ── 8. Playit Start ───────────────────────────────
+      # ══════════════════════════════════════════
+      # 10. Start Playit Tunnel
+      # ══════════════════════════════════════════
       - name: 🚀 Start Playit Tunnel
         env:
           PLAYIT_AUTH_TOKEN: ${{ secrets.PLAYIT_AUTH_TOKEN }}
@@ -88,15 +547,16 @@ jobs:
           ./playit > playit.log 2>&1 &
           echo "PLAYIT_PID=$!" >> $GITHUB_ENV
           sleep 8
-          echo "--- Playit log ---"
-          head -15 playit.log || true
+          echo "--- Playit log (first 20 lines) ---"
+          head -20 playit.log || true
 
-      # ── 9. Minecraft Server + Watchdog ────────────────
+      # ══════════════════════════════════════════
+      # 11. Run Minecraft Server
+      # ══════════════════════════════════════════
       - name: 🎮 Run Minecraft Server
         run: |
           mkfifo server_input
 
-          # Start server
           java \
             -Xms1G -Xmx4G \
             -XX:+UseG1GC \
@@ -123,65 +583,67 @@ jobs:
           SERVER_PID=$!
           echo "✅ Server PID: ${SERVER_PID}"
 
-          # ── Idle Watchdog (1 hour empty → stop) ──
+          # ── Idle Watchdog ──
           (
-            IDLE=0
-            IDLE_LIMIT=3600
-            CHECK=300
+            IDLE=0; IDLE_MAX=3600; INTERVAL=300
             while kill -0 $SERVER_PID 2>/dev/null; do
-              sleep $CHECK
-              JOINED=$(grep -c "joined the game" logs/latest.log 2>/dev/null || echo 0)
-              LEFT=$(grep -c "left the game"   logs/latest.log 2>/dev/null || echo 0)
-              ONLINE=$(( JOINED - LEFT ))
-              [ $ONLINE -lt 0 ] && ONLINE=0
-              echo "[Watchdog] Players online: ~${ONLINE}"
+              sleep $INTERVAL
+              J=$(grep -c "joined the game" logs/latest.log 2>/dev/null || echo 0)
+              L=$(grep -c "left the game"   logs/latest.log 2>/dev/null || echo 0)
+              ONLINE=$(( J - L )); [ $ONLINE -lt 0 ] && ONLINE=0
+              echo "[Watchdog] Online: ~${ONLINE} | Idle: ${IDLE}s/${IDLE_MAX}s"
               if [ "$ONLINE" = "0" ]; then
-                IDLE=$((IDLE + CHECK))
-                echo "[Watchdog] Idle: ${IDLE}/${IDLE_LIMIT}s"
-                if [ $IDLE -ge $IDLE_LIMIT ]; then
-                  echo "[Watchdog] 1hr idle → stopping server"
-                  echo "stop" > server_input
-                  break
-                fi
+                IDLE=$((IDLE + INTERVAL))
+                [ $IDLE -ge $IDLE_MAX ] && echo "[Watchdog] 1h idle → stop" \
+                  && echo "stop" > server_input && break
               else
                 IDLE=0
               fi
             done
           ) &
-          WATCHDOG_PID=$!
+          WATCHDOG=$!
 
           # ── Session timer ──
           (
             sleep ${{ env.SESSION_SECONDS }}
-            echo "⏰ ${DURATION}h session ended → stopping"
+            echo "⏰ ${{ env.DURATION }}h done → stop"
             echo "stop" > server_input
           ) &
-          TIMER_PID=$!
+          TIMER=$!
 
-          # Wait for server to exit
           wait $SERVER_PID
           echo "✅ Server stopped."
-          kill $WATCHDOG_PID $TIMER_PID ${{ env.PLAYIT_PID }} 2>/dev/null || true
+          kill $WATCHDOG $TIMER ${{ env.PLAYIT_PID }} 2>/dev/null || true
           rm -f server_input
 
-      # ── 10. World Backup ──────────────────────────────
+      # ══════════════════════════════════════════
+      # 12. Auto Backup → GitHub
+      # ══════════════════════════════════════════
       - name: 💾 Backup World to GitHub
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name  "STAR SMP Bot"
           git config --global user.email "starsmp@github.com"
 
-          git add -A world/ world_nether/ world_the_end/ \
-                     plugins/ server.properties \
-                     banned-players.json banned-ips.json \
-                     ops.json whitelist.json 2>/dev/null || true
+          git add -A \
+            world/ world_nether/ world_the_end/ \
+            server.properties ops.json \
+            whitelist.json banned-players.json banned-ips.json \
+            plugins/GUIShop/ \
+            plugins/LuckPerms/ \
+            plugins/EssentialsX/ \
+            plugins/PlaceholderAPI/ \
+            plugins/TAB/ \
+            plugins/Geyser-Spigot/ \
+            plugins/floodgate/ \
+            2>/dev/null || true
 
           if git diff --staged --quiet; then
-            echo "ℹ️ Nothing changed — skipping backup."
+            echo "ℹ️ No changes — skip."
           else
-            git commit -m "🌍 Auto-backup: $(date '+%Y-%m-%d %H:%M UTC') [skip ci]"
+            git commit -m "🌍 Auto-backup $(date '+%Y-%m-%d %H:%M UTC') [skip ci]"
             git push
-            echo "✅ World backed up!"
+            echo "✅ Backed up!"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
