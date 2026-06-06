@@ -1,0 +1,187 @@
+name: STAR SMP - Minecraft Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Session duration in hours'
+        required: false
+        default: '3'
+        type: choice
+        options: ['1', '2', '3']
+  repository_dispatch:
+    types:
+      - start-server
+
+jobs:
+  run-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+
+      # ── 1. Checkout ──────────────────────────────────
+      - name: 📦 Checkout Repository
+        uses: actions/checkout@v4
+
+      # ── 2. Java 21 ───────────────────────────────────
+      - name: ☕ Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # ── 3. Session Duration ───────────────────────────
+      - name: ⚙️ Set Session Duration
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            DURATION="${{ github.event.client_payload.duration }}"
+          else
+            DURATION="${{ github.event.inputs.duration }}"
+          fi
+          DURATION="${DURATION:-3}"
+          SESSION_SECONDS=$((DURATION * 3600))
+          echo "DURATION=${DURATION}" >> $GITHUB_ENV
+          echo "SESSION_SECONDS=${SESSION_SECONDS}" >> $GITHUB_ENV
+          echo "✅ Session: ${DURATION}h = ${SESSION_SECONDS}s"
+
+      # ── 4. Download PaperMC ───────────────────────────
+      - name: 📥 Download PaperMC 1.21.4
+        run: |
+          rm -f server.jar
+          BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds" \
+            | python3 -c "import sys,json; b=json.load(sys.stdin)['builds']; print(b[-1]['build'])")
+          echo "→ Downloading build #${BUILD}..."
+          curl -fSL -o server.jar \
+            "https://api.papermc.io/v2/projects/paper/versions/1.21.4/builds/${BUILD}/downloads/paper-1.21.4-${BUILD}.jar"
+          ls -lh server.jar
+          echo "✅ PaperMC ready"
+
+      # ── 5. EULA ───────────────────────────────────────
+      - name: 📝 Accept EULA
+        run: echo "eula=true" > eula.txt
+
+      # ── 6. Plugins folder safe ────────────────────────
+      - name: 🔌 Ensure Plugins Folder
+        run: |
+          mkdir -p plugins
+          echo "Plugins in repo:"
+          ls -la plugins/ || echo "(none yet)"
+
+      # ── 7. Playit.gg Download ─────────────────────────
+      - name: 🔗 Download Playit.gg Agent
+        run: |
+          curl -fSL -o playit \
+            "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux_amd64"
+          chmod +x playit
+          echo "✅ Playit agent ready"
+
+      # ── 8. Playit Start ───────────────────────────────
+      - name: 🚀 Start Playit Tunnel
+        env:
+          PLAYIT_AUTH_TOKEN: ${{ secrets.PLAYIT_AUTH_TOKEN }}
+        run: |
+          mkdir -p ~/.config/playit
+          cat > ~/.config/playit/config.toml << EOF
+          secret_key = "${PLAYIT_AUTH_TOKEN}"
+          EOF
+          ./playit > playit.log 2>&1 &
+          echo "PLAYIT_PID=$!" >> $GITHUB_ENV
+          sleep 8
+          echo "--- Playit log ---"
+          head -15 playit.log || true
+
+      # ── 9. Minecraft Server + Watchdog ────────────────
+      - name: 🎮 Run Minecraft Server
+        run: |
+          mkfifo server_input
+
+          # Start server
+          java \
+            -Xms1G -Xmx4G \
+            -XX:+UseG1GC \
+            -XX:+ParallelRefProcEnabled \
+            -XX:MaxGCPauseMillis=200 \
+            -XX:+UnlockExperimentalVMOptions \
+            -XX:+DisableExplicitGC \
+            -XX:+AlwaysPreTouch \
+            -XX:G1NewSizePercent=30 \
+            -XX:G1MaxNewSizePercent=40 \
+            -XX:G1HeapRegionSize=8M \
+            -XX:G1ReservePercent=20 \
+            -XX:G1HeapWastePercent=5 \
+            -XX:G1MixedGCCountTarget=4 \
+            -XX:InitiatingHeapOccupancyPercent=15 \
+            -XX:G1MixedGCLiveThresholdPercent=90 \
+            -XX:G1RSetUpdatingPauseTimePercent=5 \
+            -XX:SurvivorRatio=32 \
+            -XX:+PerfDisableSharedMem \
+            -XX:MaxTenuringThreshold=1 \
+            -Dusing.aikars.flags=https://mcflags.emc.gs \
+            -Daikars.new.flags=true \
+            -jar server.jar nogui < server_input &
+          SERVER_PID=$!
+          echo "✅ Server PID: ${SERVER_PID}"
+
+          # ── Idle Watchdog (1 hour empty → stop) ──
+          (
+            IDLE=0
+            IDLE_LIMIT=3600
+            CHECK=300
+            while kill -0 $SERVER_PID 2>/dev/null; do
+              sleep $CHECK
+              JOINED=$(grep -c "joined the game" logs/latest.log 2>/dev/null || echo 0)
+              LEFT=$(grep -c "left the game"   logs/latest.log 2>/dev/null || echo 0)
+              ONLINE=$(( JOINED - LEFT ))
+              [ $ONLINE -lt 0 ] && ONLINE=0
+              echo "[Watchdog] Players online: ~${ONLINE}"
+              if [ "$ONLINE" = "0" ]; then
+                IDLE=$((IDLE + CHECK))
+                echo "[Watchdog] Idle: ${IDLE}/${IDLE_LIMIT}s"
+                if [ $IDLE -ge $IDLE_LIMIT ]; then
+                  echo "[Watchdog] 1hr idle → stopping server"
+                  echo "stop" > server_input
+                  break
+                fi
+              else
+                IDLE=0
+              fi
+            done
+          ) &
+          WATCHDOG_PID=$!
+
+          # ── Session timer ──
+          (
+            sleep ${{ env.SESSION_SECONDS }}
+            echo "⏰ ${DURATION}h session ended → stopping"
+            echo "stop" > server_input
+          ) &
+          TIMER_PID=$!
+
+          # Wait for server to exit
+          wait $SERVER_PID
+          echo "✅ Server stopped."
+          kill $WATCHDOG_PID $TIMER_PID ${{ env.PLAYIT_PID }} 2>/dev/null || true
+          rm -f server_input
+
+      # ── 10. World Backup ──────────────────────────────
+      - name: 💾 Backup World to GitHub
+        if: always()
+        run: |
+          git config --global user.name  "STAR SMP Bot"
+          git config --global user.email "starsmp@github.com"
+
+          git add -A world/ world_nether/ world_the_end/ \
+                     plugins/ server.properties \
+                     banned-players.json banned-ips.json \
+                     ops.json whitelist.json 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "ℹ️ Nothing changed — skipping backup."
+          else
+            git commit -m "🌍 Auto-backup: $(date '+%Y-%m-%d %H:%M UTC') [skip ci]"
+            git push
+            echo "✅ World backed up!"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
