@@ -47,20 +47,34 @@ jobs:
           D="${D:-3}"
           echo "DURATION=${D}" >> $GITHUB_ENV
           echo "SESSION_SECONDS=$((D * 3600))" >> $GITHUB_ENV
-          echo "✅ Session: ${D}h"
+          echo "✅ Session: ${D}h = $((D * 3600))s"
 
       # ══════════════════════════════════════════
-      # 4. Download PaperMC 1.21.1
+      # 4. Download PaperMC 1.21.10
       # ══════════════════════════════════════════
-      - name: 📥 Download PaperMC 1.21.1
+      - name: 📥 Download PaperMC 1.21.10
         run: |
           rm -f server.jar
-          echo "Fetching latest stable PaperMC 1.21.1 build..."
-          LATEST_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/1.21.1" | python3 -c "import sys, json; print(json.load(sys.stdin)['builds'][-1])")
-          DL_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/${LATEST_BUILD}/downloads/paper-1.21.1-${LATEST_BUILD}.jar"
-          curl -fSL -o server.jar "$DL_URL"
+          USER_AGENT="StarSMP-GitHubActions/1.0"
+
+          echo "→ Fetching latest STABLE build for 1.21.10..."
+          BUILD_DATA=$(curl -s \
+            -H "User-Agent: ${USER_AGENT}" \
+            "https://fill.papermc.io/v3/projects/paper/versions/1.21.10/builds")
+
+          DL_URL=$(echo "$BUILD_DATA" | python3 -c "
+import sys, json
+builds = json.load(sys.stdin)
+stable = [b for b in builds if b.get('channel','') == 'STABLE']
+if not stable:
+    stable = builds
+b = stable[-1]
+print(b['downloads']['server:default']['url'])
+")
+          echo "→ URL: ${DL_URL}"
+          curl -fSL -H "User-Agent: ${USER_AGENT}" -o server.jar "${DL_URL}"
           ls -lh server.jar
-          echo "✅ PaperMC 1.21.1 ready"
+          echo "✅ PaperMC 1.21.10 ready"
 
       # ══════════════════════════════════════════
       # 5. EULA
@@ -93,13 +107,87 @@ jobs:
           fi
 
       # ══════════════════════════════════════════
-      # 7. Ensure Plugins Directory Exists
+      # 7. Download All Plugins (15 total)
       # ══════════════════════════════════════════
-      - name: 📁 Ensure Plugins Directory
-        run: mkdir -p plugins
+      - name: 🔌 Download Plugins
+        run: |
+          mkdir -p plugins
+          cd plugins
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Downloading STAR SMP Plugins"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          echo "[1/15] ViaVersion..."
+          curl -fSL -o ViaVersion.jar \
+            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.3.2/PAPER/ViaVersion-5.3.2.jar"
+
+          echo "[2/15] ViaBackwards..."
+          curl -fSL -o ViaBackwards.jar \
+            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.3.2/PAPER/ViaBackwards-5.3.2.jar"
+
+          echo "[3/15] Geyser (Bedrock crossplay)..."
+          curl -fSL -o Geyser-Spigot.jar \
+            "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+
+          echo "[4/15] Floodgate (Bedrock auth)..."
+          curl -fSL -o floodgate-spigot.jar \
+            "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+
+          echo "[5/15] LuckPerms..."
+          LP_URL=$(curl -s "https://metadata.luckperms.net/data/all" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['downloads']['bukkit'])")
+          curl -fSL -o LuckPerms.jar "$LP_URL"
+
+          echo "[6/15] VaultUnlocked..."
+          curl -fSL -o VaultUnlocked.jar \
+            "https://github.com/milkdrinkers/Vault/releases/latest/download/VaultUnlocked.jar"
+
+          echo "[7/15] EssentialsX..."
+          curl -fSL -o EssentialsX.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsX-2.21.2.jar"
+
+          echo "[8/15] EssentialsXChat..."
+          curl -fSL -o EssentialsXChat.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXChat-2.21.2.jar"
+
+          echo "[9/15] EssentialsXSpawn..."
+          curl -fSL -o EssentialsXSpawn.jar \
+            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXSpawn-2.21.2.jar"
+
+          echo "[10/15] GUIShop..."
+          curl -fSL -o GUIShop.jar \
+            "https://github.com/pablo67340/GUIShop/releases/latest/download/GUIShop.jar"
+
+          echo "[11/15] PlaceholderAPI..."
+          curl -fSL -o PlaceholderAPI.jar \
+            "https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.11.6/PlaceholderAPI-2.11.6.jar"
+
+          echo "[12/15] SkinsRestorer..."
+          curl -fSL -o SkinsRestorer.jar \
+            "https://github.com/SkinsRestorer/SkinsRestorer/releases/latest/download/SkinsRestorer.jar"
+
+          echo "[13/15] TAB..."
+          curl -fSL -o TAB.jar \
+            "https://github.com/NEZNAMY/TAB/releases/download/5.0.7/TAB.v5.0.7.jar"
+
+          echo "[14/15] TreeAssist..."
+          curl -fSL -o TreeAssist.jar \
+            "https://github.com/nicuch/TreeAssist/releases/latest/download/TreeAssist.jar" \
+            || echo "⚠️ TreeAssist skipped"
+
+          echo "[15/15] ClearLag..."
+          curl -fSL -o ClearLag.jar \
+            "https://github.com/JOPHESTUS/ClearLag/releases/latest/download/ClearLag.jar" \
+            || echo "⚠️ ClearLag skipped"
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Plugins ready:"
+          ls -lh *.jar
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ══════════════════════════════════════════
-      # 8. Setup GUIShop config (pre-built shop)
+      # 8. GUIShop Config
       # ══════════════════════════════════════════
       - name: 🛒 Setup GUIShop Config
         run: |
@@ -111,256 +199,61 @@ jobs:
             Blocks:
               pages:
                 Page0:
-                  '0':
-                    type: SHOP
-                    id: STONE
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&7Stone'
-                  '1':
-                    type: SHOP
-                    id: COBBLESTONE
-                    buy-price: 3
-                    sell-price: 1
-                    shop-name: '&7Cobblestone'
-                  '2':
-                    type: SHOP
-                    id: DIRT
-                    buy-price: 2
-                    sell-price: 1
-                    shop-name: '&6Dirt'
-                  '3':
-                    type: SHOP
-                    id: SAND
-                    buy-price: 4
-                    sell-price: 2
-                    shop-name: '&eSand'
-                  '4':
-                    type: SHOP
-                    id: GRAVEL
-                    buy-price: 4
-                    sell-price: 2
-                    shop-name: '&8Gravel'
-                  '5':
-                    type: SHOP
-                    id: OAK_LOG
-                    buy-price: 8
-                    sell-price: 4
-                    shop-name: '&6Oak Log'
-                  '6':
-                    type: SHOP
-                    id: OAK_PLANKS
-                    buy-price: 3
-                    sell-price: 1
-                    shop-name: '&6Oak Planks'
-                  '7':
-                    type: SHOP
-                    id: GLASS
-                    buy-price: 10
-                    sell-price: 3
-                    shop-name: '&bGlass'
-                  '8':
-                    type: SHOP
-                    id: OBSIDIAN
-                    buy-price: 50
-                    sell-price: 20
-                    shop-name: '&5Obsidian'
+                  '0': {type: SHOP, id: STONE,        buy-price: 5,   sell-price: 2,  shop-name: '&7Stone'}
+                  '1': {type: SHOP, id: COBBLESTONE,   buy-price: 3,   sell-price: 1,  shop-name: '&7Cobblestone'}
+                  '2': {type: SHOP, id: DIRT,          buy-price: 2,   sell-price: 1,  shop-name: '&6Dirt'}
+                  '3': {type: SHOP, id: SAND,          buy-price: 4,   sell-price: 2,  shop-name: '&eSand'}
+                  '4': {type: SHOP, id: GRAVEL,        buy-price: 4,   sell-price: 2,  shop-name: '&8Gravel'}
+                  '5': {type: SHOP, id: OAK_LOG,       buy-price: 8,   sell-price: 4,  shop-name: '&6Oak Log'}
+                  '6': {type: SHOP, id: OAK_PLANKS,    buy-price: 3,   sell-price: 1,  shop-name: '&6Oak Planks'}
+                  '7': {type: SHOP, id: GLASS,         buy-price: 10,  sell-price: 3,  shop-name: '&bGlass'}
+                  '8': {type: SHOP, id: OBSIDIAN,      buy-price: 50,  sell-price: 20, shop-name: '&5Obsidian'}
             Ores:
               pages:
                 Page0:
-                  '0':
-                    type: SHOP
-                    id: COAL
-                    buy-price: 8
-                    sell-price: 4
-                    shop-name: '&8Coal'
-                  '1':
-                    type: SHOP
-                    id: IRON_INGOT
-                    buy-price: 20
-                    sell-price: 10
-                    shop-name: '&7Iron Ingot'
-                  '2':
-                    type: SHOP
-                    id: GOLD_INGOT
-                    buy-price: 35
-                    sell-price: 18
-                    shop-name: '&6Gold Ingot'
-                  '3':
-                    type: SHOP
-                    id: DIAMOND
-                    buy-price: 150
-                    sell-price: 80
-                    shop-name: '&bDiamond'
-                  '4':
-                    type: SHOP
-                    id: EMERALD
-                    buy-price: 100
-                    sell-price: 50
-                    shop-name: '&aEmerald'
-                  '5':
-                    type: SHOP
-                    id: NETHERITE_INGOT
-                    buy-price: 500
-                    sell-price: 300
-                    shop-name: '&8Netherite'
-                  '6':
-                    type: SHOP
-                    id: LAPIS_LAZULI
-                    buy-price: 10
-                    sell-price: 5
-                    shop-name: '&9Lapis'
-                  '7':
-                    type: SHOP
-                    id: REDSTONE
-                    buy-price: 8
-                    sell-price: 3
-                    shop-name: '&cRedstone'
-                  '8':
-                    type: SHOP
-                    id: QUARTZ
-                    buy-price: 12
-                    sell-price: 5
-                    shop-name: '&fQuartz'
+                  '0': {type: SHOP, id: COAL,            buy-price: 8,   sell-price: 4,   shop-name: '&8Coal'}
+                  '1': {type: SHOP, id: IRON_INGOT,      buy-price: 20,  sell-price: 10,  shop-name: '&7Iron Ingot'}
+                  '2': {type: SHOP, id: GOLD_INGOT,      buy-price: 35,  sell-price: 18,  shop-name: '&6Gold Ingot'}
+                  '3': {type: SHOP, id: DIAMOND,         buy-price: 150, sell-price: 80,  shop-name: '&bDiamond'}
+                  '4': {type: SHOP, id: EMERALD,         buy-price: 100, sell-price: 50,  shop-name: '&aEmerald'}
+                  '5': {type: SHOP, id: NETHERITE_INGOT, buy-price: 500, sell-price: 300, shop-name: '&8Netherite'}
+                  '6': {type: SHOP, id: LAPIS_LAZULI,    buy-price: 10,  sell-price: 5,   shop-name: '&9Lapis'}
+                  '7': {type: SHOP, id: REDSTONE,        buy-price: 8,   sell-price: 3,   shop-name: '&cRedstone'}
+                  '8': {type: SHOP, id: QUARTZ,          buy-price: 12,  sell-price: 5,   shop-name: '&fQuartz'}
             Food:
               pages:
                 Page0:
-                  '0':
-                    type: SHOP
-                    id: BREAD
-                    buy-price: 8
-                    sell-price: 3
-                    shop-name: '&6Bread'
-                  '1':
-                    type: SHOP
-                    id: COOKED_BEEF
-                    buy-price: 12
-                    sell-price: 5
-                    shop-name: '&6Steak'
-                  '2':
-                    type: SHOP
-                    id: COOKED_CHICKEN
-                    buy-price: 10
-                    sell-price: 4
-                    shop-name: '&eChicken'
-                  '3':
-                    type: SHOP
-                    id: GOLDEN_APPLE
-                    buy-price: 80
-                    sell-price: 40
-                    shop-name: '&6Golden Apple'
-                  '4':
-                    type: SHOP
-                    id: ENCHANTED_GOLDEN_APPLE
-                    buy-price: 500
-                    sell-price: 0
-                    shop-name: '&dGod Apple'
-                  '5':
-                    type: SHOP
-                    id: COOKED_PORKCHOP
-                    buy-price: 10
-                    sell-price: 4
-                    shop-name: '&6Porkchop'
+                  '0': {type: SHOP, id: BREAD,                   buy-price: 8,   sell-price: 3,  shop-name: '&6Bread'}
+                  '1': {type: SHOP, id: COOKED_BEEF,             buy-price: 12,  sell-price: 5,  shop-name: '&6Steak'}
+                  '2': {type: SHOP, id: COOKED_CHICKEN,          buy-price: 10,  sell-price: 4,  shop-name: '&eChicken'}
+                  '3': {type: SHOP, id: GOLDEN_APPLE,            buy-price: 80,  sell-price: 40, shop-name: '&6Golden Apple'}
+                  '4': {type: SHOP, id: ENCHANTED_GOLDEN_APPLE,  buy-price: 500, sell-price: 0,  shop-name: '&dGod Apple'}
+                  '5': {type: SHOP, id: COOKED_PORKCHOP,         buy-price: 10,  sell-price: 4,  shop-name: '&6Porkchop'}
             Farming:
               pages:
                 Page0:
-                  '0':
-                    type: SHOP
-                    id: WHEAT_SEEDS
-                    buy-price: 3
-                    sell-price: 1
-                    shop-name: '&aWheat Seeds'
-                  '1':
-                    type: SHOP
-                    id: WHEAT
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&eWheat'
-                  '2':
-                    type: SHOP
-                    id: CARROT
-                    buy-price: 4
-                    sell-price: 2
-                    shop-name: '&6Carrot'
-                  '3':
-                    type: SHOP
-                    id: POTATO
-                    buy-price: 4
-                    sell-price: 2
-                    shop-name: '&ePotatot'
-                  '4':
-                    type: SHOP
-                    id: SUGAR_CANE
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&aSugar Cane'
-                  '5':
-                    type: SHOP
-                    id: CACTUS
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&2Cactus'
+                  '0': {type: SHOP, id: WHEAT_SEEDS, buy-price: 3, sell-price: 1, shop-name: '&aWheat Seeds'}
+                  '1': {type: SHOP, id: WHEAT,        buy-price: 5, sell-price: 2, shop-name: '&eWheat'}
+                  '2': {type: SHOP, id: CARROT,       buy-price: 4, sell-price: 2, shop-name: '&6Carrot'}
+                  '3': {type: SHOP, id: POTATO,       buy-price: 4, sell-price: 2, shop-name: '&ePotato'}
+                  '4': {type: SHOP, id: SUGAR_CANE,   buy-price: 5, sell-price: 2, shop-name: '&aSugar Cane'}
+                  '5': {type: SHOP, id: CACTUS,       buy-price: 5, sell-price: 2, shop-name: '&2Cactus'}
             MobDrops:
               pages:
                 Page0:
-                  '0':
-                    type: SHOP
-                    id: STRING
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&fString'
-                  '1':
-                    type: SHOP
-                    id: BONE
-                    buy-price: 5
-                    sell-price: 2
-                    shop-name: '&fBone'
-                  '2':
-                    type: SHOP
-                    id: GUNPOWDER
-                    buy-price: 10
-                    sell-price: 5
-                    shop-name: '&8Gunpowder'
-                  '3':
-                    type: SHOP
-                    id: ENDER_PEARL
-                    buy-price: 30
-                    sell-price: 15
-                    shop-name: '&5Ender Pearl'
-                  '4':
-                    type: SHOP
-                    id: BLAZE_ROD
-                    buy-price: 25
-                    sell-price: 12
-                    shop-name: '&6Blaze Rod'
-                  '5':
-                    type: SHOP
-                    id: LEATHER
-                    buy-price: 8
-                    sell-price: 4
-                    shop-name: '&6Leather'
-                  '6':
-                    type: SHOP
-                    id: SPIDER_EYE
-                    buy-price: 8
-                    sell-price: 4
-                    shop-name: '&cSpider Eye'
-                  '7':
-                    type: SHOP
-                    id: ROTTEN_FLESH
-                    buy-price: 2
-                    sell-price: 1
-                    shop-name: '&2Rotten Flesh'
-                  '8':
-                    type: SHOP
-                    id: SLIME_BALL
-                    buy-price: 15
-                    sell-price: 8
-                    shop-name: '&aSlimeball'
+                  '0': {type: SHOP, id: STRING,       buy-price: 5,  sell-price: 2,  shop-name: '&fString'}
+                  '1': {type: SHOP, id: BONE,         buy-price: 5,  sell-price: 2,  shop-name: '&fBone'}
+                  '2': {type: SHOP, id: GUNPOWDER,    buy-price: 10, sell-price: 5,  shop-name: '&8Gunpowder'}
+                  '3': {type: SHOP, id: ENDER_PEARL,  buy-price: 30, sell-price: 15, shop-name: '&5Ender Pearl'}
+                  '4': {type: SHOP, id: BLAZE_ROD,    buy-price: 25, sell-price: 12, shop-name: '&6Blaze Rod'}
+                  '5': {type: SHOP, id: LEATHER,      buy-price: 8,  sell-price: 4,  shop-name: '&6Leather'}
+                  '6': {type: SHOP, id: SPIDER_EYE,   buy-price: 8,  sell-price: 4,  shop-name: '&cSpider Eye'}
+                  '7': {type: SHOP, id: ROTTEN_FLESH, buy-price: 2,  sell-price: 1,  shop-name: '&2Rotten Flesh'}
+                  '8': {type: SHOP, id: SLIME_BALL,   buy-price: 15, sell-price: 8,  shop-name: '&aSlimeball'}
           EOF
-            echo "✅ GUIShop config created"
+            echo "✅ shops.yml created"
           else
-            echo "✅ Existing GUIShop config kept"
+            echo "✅ Existing shops.yml kept"
           fi
 
           if [ ! -f plugins/GUIShop/menu.yml ]; then
@@ -369,70 +262,80 @@ jobs:
             rows: 3
             title: '&8» &b&lSTAR SMP &8| &7Shop'
             items:
-              '10':
-                type: BUTTON
-                id: STONE
-                name: '&7&lBlocks'
-                lore:
-                  - '&8Buy & Sell building blocks'
-                shop: Blocks
-              '12':
-                type: BUTTON
-                id: DIAMOND
-                name: '&b&lOres & Gems'
-                lore:
-                  - '&8Buy & Sell ores and gems'
-                shop: Ores
-              '14':
-                type: BUTTON
-                id: BREAD
-                name: '&6&lFood'
-                lore:
-                  - '&8Buy & Sell food items'
-                shop: Food
-              '16':
-                type: BUTTON
-                id: WHEAT
-                name: '&a&lFarming'
-                lore:
-                  - '&8Buy & Sell farming items'
-                shop: Farming
-              '22':
-                type: BUTTON
-                id: BONE
-                name: '&f&lMob Drops'
-                lore:
-                  - '&8Buy & Sell mob drops'
-                shop: MobDrops
+              '10': {type: BUTTON, id: STONE,   name: '&7&lBlocks',    lore: ['&8Buy & Sell building blocks'], shop: Blocks}
+              '12': {type: BUTTON, id: DIAMOND, name: '&b&lOres',      lore: ['&8Buy & Sell ores and gems'],   shop: Ores}
+              '14': {type: BUTTON, id: BREAD,   name: '&6&lFood',      lore: ['&8Buy & Sell food items'],      shop: Food}
+              '16': {type: BUTTON, id: WHEAT,   name: '&a&lFarming',   lore: ['&8Buy & Sell farm items'],      shop: Farming}
+              '22': {type: BUTTON, id: BONE,    name: '&f&lMob Drops', lore: ['&8Buy & Sell mob drops'],       shop: MobDrops}
           EOF
-            echo "✅ GUIShop menu.yml created"
+            echo "✅ menu.yml created"
           fi
 
       # ══════════════════════════════════════════
-      # 9. Download Playit.gg
+      # 9. Setup ngrok
       # ══════════════════════════════════════════
-      - name: 🔗 Setup Playit.gg Agent
+      - name: 🔗 Setup ngrok
         run: |
-          curl -fSL -o playit "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux_amd64"
-          chmod +x playit
-          echo "✅ Playit agent ready"
+          # Download ngrok Linux amd64
+          curl -fSL -o ngrok.zip \
+            "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip"
+          unzip -q ngrok.zip
+          chmod +x ngrok
+          echo "✅ ngrok ready"
 
       # ══════════════════════════════════════════
-      # 10. Start Playit Tunnel
+      # 10. Start ngrok TCP Tunnel
+      #     IP টা log এ দেখাবে — Discord এ paste করো
       # ══════════════════════════════════════════
-      - name: 🚀 Start Playit Tunnel
+      - name: 🚀 Start ngrok Tunnel & Show Server IP
         env:
-          PLAYIT_AUTH_TOKEN: ${{ secrets.PLAYIT_AUTH_TOKEN }}
+          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
         run: |
-          mkdir -p ~/.config/playit
-          cat > ~/.config/playit/config.toml << EOF
-          secret_key = "${PLAYIT_AUTH_TOKEN}"
-          EOF
-          ./playit > playit.log 2>&1 &
-          echo "PLAYIT_PID=$!" >> $GITHUB_ENV
+          # Authenticate ngrok
+          ./ngrok config add-authtoken "${NGROK_TOKEN}"
+
+          # Start TCP tunnel on port 25565 in background
+          ./ngrok tcp 25565 > ngrok.log 2>&1 &
+          echo "NGROK_PID=$!" >> $GITHUB_ENV
+
+          # Wait for tunnel to establish
+          echo "⏳ Waiting for ngrok tunnel..."
           sleep 8
-          echo "--- Playit log (first 20 lines) ---"
-          head -20 playit.log || true
+
+          # Get the public address from ngrok API
+          for i in 1 2 3 4 5; do
+            NGROK_ADDR=$(curl -s http://localhost:4040/api/tunnels \
+              | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tunnels = data.get('tunnels', [])
+    if tunnels:
+        addr = tunnels[0]['public_url'].replace('tcp://', '')
+        print(addr)
+    else:
+        print('NOT_READY')
+except:
+    print('NOT_READY')
+")
+            if [ "$NGROK_ADDR" != "NOT_READY" ] && [ -n "$NGROK_ADDR" ]; then
+              break
+            fi
+            echo "Retry ${i}/5..."
+            sleep 3
+          done
+
+          echo ""
+          echo "╔══════════════════════════════════════╗"
+          echo "║   🎮 STAR SMP SERVER IP ADDRESS 🎮   ║"
+          echo "╠══════════════════════════════════════╣"
+          echo "║  ${NGROK_ADDR}"
+          echo "║                                      ║"
+          echo "║  Java: use the address above         ║"
+          echo "║  Bedrock: same address, same port    ║"
+          echo "╚══════════════════════════════════════╝"
+          echo ""
+          echo "SERVER_IP=${NGROK_ADDR}" >> $GITHUB_ENV
 
       # ══════════════════════════════════════════
       # 11. Run Minecraft Server
@@ -440,7 +343,6 @@ jobs:
       - name: 🎮 Run Minecraft Server
         run: |
           mkfifo server_input
-          exec 3<>server_input
 
           java \
             -Xms1G -Xmx4G \
@@ -475,12 +377,16 @@ jobs:
               sleep $INTERVAL
               J=$(grep -c "joined the game" logs/latest.log 2>/dev/null || echo 0)
               L=$(grep -c "left the game"   logs/latest.log 2>/dev/null || echo 0)
-              ONLINE=$(( J - L )); [ $ONLINE -lt 0 ] && ONLINE=0
-              echo "[Watchdog] Online: ~${ONLINE} | Idle: ${IDLE}s/${IDLE_MAX}s"
+              ONLINE=$(( J - L ))
+              [ $ONLINE -lt 0 ] && ONLINE=0
+              echo "[Watchdog] Online: ~${ONLINE} | Idle: ${IDLE}s / ${IDLE_MAX}s"
               if [ "$ONLINE" = "0" ]; then
                 IDLE=$((IDLE + INTERVAL))
-                [ $IDLE -ge $IDLE_MAX ] && echo "[Watchdog] 1h idle → stop" \
-                  && echo "stop" > server_input && break
+                if [ $IDLE -ge $IDLE_MAX ]; then
+                  echo "[Watchdog] 1h idle → stop"
+                  echo "stop" > server_input
+                  break
+                fi
               else
                 IDLE=0
               fi
@@ -498,12 +404,11 @@ jobs:
 
           wait $SERVER_PID
           echo "✅ Server stopped."
-          exec 3>&- # Close FIFO safely
-          kill $WATCHDOG $TIMER ${{ env.PLAYIT_PID }} 2>/dev/null || true
+          kill $WATCHDOG $TIMER ${{ env.NGROK_PID }} 2>/dev/null || true
           rm -f server_input
 
       # ══════════════════════════════════════════
-      # 12. Auto Backup → GitHub
+      # 12. Auto Backup World → GitHub
       # ══════════════════════════════════════════
       - name: 💾 Backup World to GitHub
         if: always()
@@ -517,7 +422,14 @@ jobs:
             world/ world_nether/ world_the_end/ \
             server.properties ops.json \
             whitelist.json banned-players.json banned-ips.json \
-            plugins/ 2>/dev/null || true
+            plugins/GUIShop/ \
+            plugins/LuckPerms/ \
+            plugins/EssentialsX/ \
+            plugins/PlaceholderAPI/ \
+            plugins/TAB/ \
+            plugins/Geyser-Spigot/ \
+            plugins/floodgate/ \
+            2>/dev/null || true
 
           if git diff --staged --quiet; then
             echo "ℹ️ No changes — skip."
