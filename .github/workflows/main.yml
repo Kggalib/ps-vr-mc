@@ -56,7 +56,6 @@ jobs:
         run: |
           rm -f server.jar
           echo "Fetching latest stable PaperMC 1.21.1 build..."
-          # Fixed API URL from fill.papermc.io to api.papermc.io
           LATEST_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/1.21.1" | python3 -c "import sys, json; print(json.load(sys.stdin)['builds'][-1])")
           DL_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/${LATEST_BUILD}/downloads/paper-1.21.1-${LATEST_BUILD}.jar"
           curl -fSL -o server.jar "$DL_URL"
@@ -94,88 +93,10 @@ jobs:
           fi
 
       # ══════════════════════════════════════════
-      # 7. Download All Plugins (Fixed Auto-Download)
+      # 7. Ensure Plugins Directory Exists
       # ══════════════════════════════════════════
-      - name: 🔌 Download Plugins
-        run: |
-          mkdir -p plugins
-          cd plugins
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "   Downloading STAR SMP Plugins (15)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # ── CROSSPLAY ─────────────────────────────────────────
-
-          echo "[1/15] ViaVersion..."
-          curl -fSL -o ViaVersion.jar "https://github.com/ViaVersion/ViaVersion/releases/latest/download/ViaVersion-5.3.2.jar" || \
-          curl -fSL -o ViaVersion.jar "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.3.2/PAPER/ViaVersion-5.3.2.jar"
-
-          echo "[2/15] ViaBackwards..."
-          curl -fSL -o ViaBackwards.jar "https://github.com/ViaVersion/ViaBackwards/releases/latest/download/ViaBackwards-5.3.2.jar" || \
-          curl -fSL -o ViaBackwards.jar "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.3.2/PAPER/ViaBackwards-5.3.2.jar"
-
-          echo "[3/15] Geyser..."
-          curl -fSL -o Geyser-Spigot.jar "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
-
-          echo "[4/15] Floodgate..."
-          curl -fSL -o floodgate-spigot.jar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
-
-          # ── PERMISSIONS & CORE ────────────────────────────────
-
-          echo "[5/15] LuckPerms..."
-          LP_URL=$(curl -s "https://metadata.luckperms.net/data/all" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['downloads']['bukkit'])")
-          curl -fSL -o LuckPerms.jar "$LP_URL"
-
-          echo "[6/15] VaultUnlocked..."
-          curl -fSL -o VaultUnlocked.jar "https://github.com/milkdrinkers/Vault/releases/latest/download/VaultUnlocked.jar"
-
-          echo "[7/15] EssentialsX..."
-          curl -fSL -o EssentialsX.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsX-2.21.0.jar"
-
-          echo "[8/15] EssentialsXChat..."
-          curl -fSL -o EssentialsXChat.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsXChat-2.21.0.jar"
-
-          echo "[9/15] EssentialsXSpawn..."
-          curl -fSL -o EssentialsXSpawn.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsXSpawn-2.21.0.jar"
-
-          # ── ECONOMY & SHOP ────────────────────────────────────
-
-          echo "[10/15] GUIShop..."
-          curl -fSL -o GUIShop.jar "https://github.com/pablo67340/GUIShop/releases/latest/download/GUIShop.jar"
-
-          # ── PLAYER EXPERIENCE ─────────────────────────────────
-
-          echo "[11/15] PlaceholderAPI..."
-          PAPI_URL=$(curl -s "https://api.github.com/repos/PlaceholderAPI/PlaceholderAPI/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
-          curl -fSL -o PlaceholderAPI.jar "$PAPI_URL"
-
-          echo "[12/15] SkinsRestorer..."
-          curl -fSL -o SkinsRestorer.jar "https://github.com/SkinsRestorer/SkinsRestorer/releases/latest/download/SkinsRestorer.jar"
-
-          echo "[13/15] TAB..."
-          TAB_URL=$(curl -s "https://api.github.com/repos/NEZNAMY/TAB/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
-          curl -fSL -o TAB.jar "$TAB_URL"
-
-          echo "[14/15] TreeAssist..."
-          TA_URL=$(curl -s "https://api.github.com/repos/nicuch/TreeAssist/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
-          curl -fSL -o TreeAssist.jar "$TA_URL" || echo "⚠️ TreeAssist skip"
-
-          echo "[15/15] ClearLag..."
-          # Fetches from official build variant if GitHub release isn't directly formatted
-          CL_URL=$(curl -s "https://api.github.com/repos/JOPHESTUS/ClearLag/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); assets=[a['browser_download_url'] for a in r.get('assets', []) if a['name'].endswith('.jar')]; print(assets[0] if assets else '')")
-          if [ -n "$CL_URL" ]; then
-            curl -fSL -o ClearLag.jar "$CL_URL"
-          else
-            echo "⚠️ ClearLag direct GitHub file not found, fetching fallback..."
-            curl -fSL -o ClearLag.jar "https://github.com/JOPHESTUS/ClearLag/releases/latest/download/Clearlag.jar" || echo "⚠️ ClearLag skip"
-          fi
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Plugins downloaded successfully:"
-          ls -lh *.jar 2>/dev/null || echo "(none)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      - name: 📁 Ensure Plugins Directory
+        run: mkdir -p plugins
 
       # ══════════════════════════════════════════
       # 8. Setup GUIShop config (pre-built shop)
@@ -519,8 +440,6 @@ jobs:
       - name: 🎮 Run Minecraft Server
         run: |
           mkfifo server_input
-          
-          # Added a dummy background descriptor to keep FIFO open and prevent early EOF
           exec 3<>server_input
 
           java \
@@ -598,14 +517,7 @@ jobs:
             world/ world_nether/ world_the_end/ \
             server.properties ops.json \
             whitelist.json banned-players.json banned-ips.json \
-            plugins/GUIShop/ \
-            plugins/LuckPerms/ \
-            plugins/EssentialsX/ \
-            plugins/PlaceholderAPI/ \
-            plugins/TAB/ \
-            plugins/Geyser-Spigot/ \
-            plugins/floodgate/ \
-            2>/dev/null || true
+            plugins/ 2>/dev/null || true
 
           if git diff --staged --quiet; then
             echo "ℹ️ No changes — skip."
