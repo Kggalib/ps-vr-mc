@@ -50,23 +50,18 @@ jobs:
           echo "✅ Session: ${D}h"
 
       # ══════════════════════════════════════════
-      # 4. Download PaperMC 1.21.10
+      # 4. Download PaperMC 1.21.1
       # ══════════════════════════════════════════
-      - name: 📥 Download PaperMC 1.21.10
+      - name: 📥 Download PaperMC 1.21.1
         run: |
           rm -f server.jar
-          echo "Fetching latest stable PaperMC 1.21.10 build..."
-          DL_URL=$(curl -s "https://fill.papermc.io/v3/projects/paper/versions/1.21.10/builds" \
-            | python3 -c "
-import sys, json
-builds = json.load(sys.stdin)
-stable = [b for b in builds if b.get('channel','') == 'STABLE']
-b = stable[-1] if stable else builds[-1]
-print(b['downloads']['server:default']['url'])
-")
+          echo "Fetching latest stable PaperMC 1.21.1 build..."
+          # Fixed API URL from fill.papermc.io to api.papermc.io
+          LATEST_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/1.21.1" | python3 -c "import sys, json; print(json.load(sys.stdin)['builds'][-1])")
+          DL_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/${LATEST_BUILD}/downloads/paper-1.21.1-${LATEST_BUILD}.jar"
           curl -fSL -o server.jar "$DL_URL"
           ls -lh server.jar
-          echo "✅ PaperMC 1.21.10 ready"
+          echo "✅ PaperMC 1.21.1 ready"
 
       # ══════════════════════════════════════════
       # 5. EULA
@@ -99,7 +94,7 @@ print(b['downloads']['server:default']['url'])
           fi
 
       # ══════════════════════════════════════════
-      # 7. Download All Plugins
+      # 7. Download All Plugins (Fixed Auto-Download)
       # ══════════════════════════════════════════
       - name: 🔌 Download Plugins
         run: |
@@ -112,93 +107,73 @@ print(b['downloads']['server:default']['url'])
 
           # ── CROSSPLAY ─────────────────────────────────────────
 
-          # 1. ViaVersion — পুরনো Java clients
           echo "[1/15] ViaVersion..."
-          curl -fSL -o ViaVersion.jar \
-            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.3.2/PAPER/ViaVersion-5.3.2.jar"
+          curl -fSL -o ViaVersion.jar "https://github.com/ViaVersion/ViaVersion/releases/latest/download/ViaVersion-5.3.2.jar" || \
+          curl -fSL -o ViaVersion.jar "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions/5.3.2/PAPER/ViaVersion-5.3.2.jar"
 
-          # 2. ViaBackwards — 1.19/1.20 clients ও চলবে
           echo "[2/15] ViaBackwards..."
-          curl -fSL -o ViaBackwards.jar \
-            "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.3.2/PAPER/ViaBackwards-5.3.2.jar"
+          curl -fSL -o ViaBackwards.jar "https://github.com/ViaVersion/ViaBackwards/releases/latest/download/ViaBackwards-5.3.2.jar" || \
+          curl -fSL -o ViaBackwards.jar "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.3.2/PAPER/ViaBackwards-5.3.2.jar"
 
-          # 3. Geyser — Bedrock crossplay
           echo "[3/15] Geyser..."
-          curl -fSL -o Geyser-Spigot.jar \
-            "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+          curl -fSL -o Geyser-Spigot.jar "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
 
-          # 4. Floodgate — Bedrock auth (online-mode=false safe)
           echo "[4/15] Floodgate..."
-          curl -fSL -o floodgate-spigot.jar \
-            "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+          curl -fSL -o floodgate-spigot.jar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
 
           # ── PERMISSIONS & CORE ────────────────────────────────
 
-          # 5. LuckPerms — Permission system
           echo "[5/15] LuckPerms..."
-          LP_URL=$(curl -s "https://metadata.luckperms.net/data/all" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['downloads']['bukkit'])")
+          LP_URL=$(curl -s "https://metadata.luckperms.net/data/all" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['downloads']['bukkit'])")
           curl -fSL -o LuckPerms.jar "$LP_URL"
 
-          # 6. VaultUnlocked — Economy API (Vault fork, 1.21 compatible)
           echo "[6/15] VaultUnlocked..."
-          curl -fSL -o VaultUnlocked.jar \
-            "https://github.com/milkdrinkers/Vault/releases/latest/download/VaultUnlocked.jar"
+          curl -fSL -o VaultUnlocked.jar "https://github.com/milkdrinkers/Vault/releases/latest/download/VaultUnlocked.jar"
 
-          # 7. EssentialsX — Core commands (/home /tpa /warp /spawn etc)
           echo "[7/15] EssentialsX..."
-          curl -fSL -o EssentialsX.jar \
-            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsX-2.21.2.jar"
+          curl -fSL -o EssentialsX.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsX-2.21.0.jar"
 
-          # 8. EssentialsXChat — Chat formatting with prefix/suffix
           echo "[8/15] EssentialsXChat..."
-          curl -fSL -o EssentialsXChat.jar \
-            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXChat-2.21.2.jar"
+          curl -fSL -o EssentialsXChat.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsXChat-2.21.0.jar"
 
-          # 9. EssentialsXSpawn — Spawn & join control
           echo "[9/15] EssentialsXSpawn..."
-          curl -fSL -o EssentialsXSpawn.jar \
-            "https://github.com/EssentialsX/Essentials/releases/download/2.21.2/EssentialsXSpawn-2.21.2.jar"
+          curl -fSL -o EssentialsXSpawn.jar "https://github.com/EssentialsX/Essentials/releases/download/2.21.0/EssentialsXSpawn-2.21.0.jar"
 
           # ── ECONOMY & SHOP ────────────────────────────────────
 
-          # 10. GUIShop — GUI-based /shop (buy & sell)
           echo "[10/15] GUIShop..."
-          curl -fSL -o GUIShop.jar \
-            "https://github.com/pablo67340/GUIShop/releases/latest/download/GUIShop.jar"
+          curl -fSL -o GUIShop.jar "https://github.com/pablo67340/GUIShop/releases/latest/download/GUIShop.jar"
 
           # ── PLAYER EXPERIENCE ─────────────────────────────────
 
-          # 11. PlaceholderAPI — Variable support for all plugins
           echo "[11/15] PlaceholderAPI..."
-          curl -fSL -o PlaceholderAPI.jar \
-            "https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.11.6/PlaceholderAPI-2.11.6.jar"
+          PAPI_URL=$(curl -s "https://api.github.com/repos/PlaceholderAPI/PlaceholderAPI/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
+          curl -fSL -o PlaceholderAPI.jar "$PAPI_URL"
 
-          # 12. SkinsRestorer — Bedrock players এর skin fix
           echo "[12/15] SkinsRestorer..."
-          curl -fSL -o SkinsRestorer.jar \
-            "https://github.com/SkinsRestorer/SkinsRestorer/releases/latest/download/SkinsRestorer.jar"
+          curl -fSL -o SkinsRestorer.jar "https://github.com/SkinsRestorer/SkinsRestorer/releases/latest/download/SkinsRestorer.jar"
 
-          # 13. TAB — Tab list, nametags, scoreboard
           echo "[13/15] TAB..."
-          curl -fSL -o TAB.jar \
-            "https://github.com/NEZNAMY/TAB/releases/download/5.0.7/TAB.v5.0.7.jar"
+          TAB_URL=$(curl -s "https://api.github.com/repos/NEZNAMY/TAB/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
+          curl -fSL -o TAB.jar "$TAB_URL"
 
-          # 14. TreeAssist — Auto replant trees when cut
           echo "[14/15] TreeAssist..."
-          curl -fSL -o TreeAssist.jar \
-            "https://github.com/nicuch/TreeAssist/releases/latest/download/TreeAssist.jar" \
-            || echo "⚠️ TreeAssist skip (optional)"
+          TA_URL=$(curl -s "https://api.github.com/repos/nicuch/TreeAssist/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if a['name'].endswith('.jar')][0])")
+          curl -fSL -o TreeAssist.jar "$TA_URL" || echo "⚠️ TreeAssist skip"
 
-          # 15. ClearLag — Auto clear dropped items (prevent lag)
           echo "[15/15] ClearLag..."
-          curl -fSL -o ClearLag.jar \
-            "https://github.com/JOPHESTUS/ClearLag/releases/latest/download/ClearLag.jar" \
-            || echo "⚠️ ClearLag skip (optional)"
+          # Fetches from official build variant if GitHub release isn't directly formatted
+          CL_URL=$(curl -s "https://api.github.com/repos/JOPHESTUS/ClearLag/releases/latest" | python3 -c "import sys,json; r=json.load(sys.stdin); assets=[a['browser_download_url'] for a in r.get('assets', []) if a['name'].endswith('.jar')]; print(assets[0] if assets else '')")
+          if [ -n "$CL_URL" ]; then
+            curl -fSL -o ClearLag.jar "$CL_URL"
+          else
+            echo "⚠️ ClearLag direct GitHub file not found, fetching fallback..."
+            curl -fSL -o ClearLag.jar "https://github.com/JOPHESTUS/ClearLag/releases/latest/download/Clearlag.jar" || echo "⚠️ ClearLag skip"
+          fi
 
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Plugins downloaded:"
+          echo "✅ Plugins downloaded successfully:"
           ls -lh *.jar 2>/dev/null || echo "(none)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -209,11 +184,9 @@ print(b['downloads']['server:default']['url'])
         run: |
           mkdir -p plugins/GUIShop
 
-          # Only create if doesn't exist (preserves existing config after backup)
           if [ ! -f plugins/GUIShop/shops.yml ]; then
             cat > plugins/GUIShop/shops.yml << 'EOF'
           shops:
-            # ── BLOCKS ──────────────────────────────
             Blocks:
               pages:
                 Page0:
@@ -271,8 +244,6 @@ print(b['downloads']['server:default']['url'])
                     buy-price: 50
                     sell-price: 20
                     shop-name: '&5Obsidian'
-
-            # ── ORES & GEMS ─────────────────────────
             Ores:
               pages:
                 Page0:
@@ -330,8 +301,6 @@ print(b['downloads']['server:default']['url'])
                     buy-price: 12
                     sell-price: 5
                     shop-name: '&fQuartz'
-
-            # ── FOOD ────────────────────────────────
             Food:
               pages:
                 Page0:
@@ -371,8 +340,6 @@ print(b['downloads']['server:default']['url'])
                     buy-price: 10
                     sell-price: 4
                     shop-name: '&6Porkchop'
-
-            # ── FARMING ─────────────────────────────
             Farming:
               pages:
                 Page0:
@@ -412,8 +379,6 @@ print(b['downloads']['server:default']['url'])
                     buy-price: 5
                     sell-price: 2
                     shop-name: '&2Cactus'
-
-            # ── MOB DROPS ───────────────────────────
             MobDrops:
               pages:
                 Page0:
@@ -472,12 +437,11 @@ print(b['downloads']['server:default']['url'])
                     sell-price: 8
                     shop-name: '&aSlimeball'
           EOF
-            echo "✅ GUIShop config created (5 categories)"
+            echo "✅ GUIShop config created"
           else
             echo "✅ Existing GUIShop config kept"
           fi
 
-          # menu.yml — Main shop menu
           if [ ! -f plugins/GUIShop/menu.yml ]; then
             cat > plugins/GUIShop/menu.yml << 'EOF'
           menu:
@@ -528,8 +492,7 @@ print(b['downloads']['server:default']['url'])
       # ══════════════════════════════════════════
       - name: 🔗 Setup Playit.gg Agent
         run: |
-          curl -fSL -o playit \
-            "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux_amd64"
+          curl -fSL -o playit "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux_amd64"
           chmod +x playit
           echo "✅ Playit agent ready"
 
@@ -556,6 +519,9 @@ print(b['downloads']['server:default']['url'])
       - name: 🎮 Run Minecraft Server
         run: |
           mkfifo server_input
+          
+          # Added a dummy background descriptor to keep FIFO open and prevent early EOF
+          exec 3<>server_input
 
           java \
             -Xms1G -Xmx4G \
@@ -613,6 +579,7 @@ print(b['downloads']['server:default']['url'])
 
           wait $SERVER_PID
           echo "✅ Server stopped."
+          exec 3>&- # Close FIFO safely
           kill $WATCHDOG $TIMER ${{ env.PLAYIT_PID }} 2>/dev/null || true
           rm -f server_input
 
